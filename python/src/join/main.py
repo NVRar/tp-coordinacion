@@ -22,11 +22,29 @@ class JoinFilter:
         self.output_queue = middleware.MessageMiddlewareQueueRabbitMQ(
             MOM_HOST, OUTPUT_QUEUE
         )
+        self.partial_tops = {}
+        self.top_counts = {}
 
     def process_messsage(self, message, ack, nack):
         logging.info("Received top")
-        fruit_top = message_protocol.internal.deserialize(message)
-        result = message_protocol.internal.serialize_result_message(fruit_top[1], fruit_top[2])
+        fields = message_protocol.internal.deserialize(message)
+        client_id = fields[1]
+        partial_top = fields[2]
+
+        self.partial_tops[client_id] = self.partial_tops.get(client_id, []) + partial_top
+        self.top_counts[client_id] = self.top_counts.get(client_id, 0) + 1
+
+        if self.top_counts[client_id] < AGGREGATION_AMOUNT:
+            ack()
+            return
+
+        merged_top = sorted(self.partial_tops[client_id], key=lambda x: x[1], reverse=True)
+        final_top = merged_top[:TOP_SIZE]
+
+        del self.partial_tops[client_id]
+        del self.top_counts[client_id]
+
+        result = message_protocol.internal.serialize_result_message(client_id, final_top)
         self.output_queue.send(result)
         ack()
 

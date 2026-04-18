@@ -1,6 +1,7 @@
 import os
 import logging
 import threading
+import hashlib
 
 from common import middleware, message_protocol, fruit_item
 
@@ -50,18 +51,24 @@ class ControlConsumer:
         self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
             MOM_HOST, SUM_CONTROL_EXCHANGE, [f"{SUM_CONTROL_EXCHANGE}_{ID}"]
         )
-        self.data_output_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
-            MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{i}" for i in range(AGGREGATION_AMOUNT)]
-        )
+        self.data_output_exchanges = []
+        for i in range(AGGREGATION_AMOUNT):
+            data_output_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
+                MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{i}"]
+            )
+            self.data_output_exchanges.append(data_output_exchange)
 
     def _process_eof(self, client_id):
         items = self.fruit_store.get(client_id)
 
         for fi in items:
-            self.data_output_exchange.send(message_protocol.internal.serialize_data_message(client_id, fi.fruit, fi.amount))
-        self.data_output_exchange.send(message_protocol.internal.serialize_eof(client_id))
+            target = int(hashlib.md5(fi.fruit.encode()).hexdigest(), 16) % AGGREGATION_AMOUNT
+            self.data_output_exchanges[target].send(message_protocol.internal.serialize_data_message(client_id, fi.fruit, fi.amount))
 
         self.fruit_store.delete(client_id)
+
+        for exchange in self.data_output_exchanges:
+            exchange.send(message_protocol.internal.serialize_eof(client_id))
 
     def process_control_message(self, message, ack, nack):
         fields = message_protocol.internal.deserialize(message)
