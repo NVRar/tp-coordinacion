@@ -36,8 +36,8 @@ class SumFilter:
         for final_fruit_item in items:
             for data_output_exchange in self.data_output_exchanges:
                 data_output_exchange.send(
-                    message_protocol.internal.serialize(
-                        [client_id, final_fruit_item.fruit, final_fruit_item.amount]
+                    message_protocol.internal.serialize_data_message(
+                        client_id, final_fruit_item.fruit, final_fruit_item.amount
                     )
                 )
                 
@@ -45,15 +45,15 @@ class SumFilter:
 
         logging.info(f"Broadcasting EOF message")
         for data_output_exchange in self.data_output_exchanges:
-            data_output_exchange.send(message_protocol.internal.serialize([client_id]))
+            data_output_exchange.send(message_protocol.internal.serialize_eof(client_id))
 
 
     def process_data_messsage(self, message, ack, nack):
         fields = message_protocol.internal.deserialize(message)
-        if len(fields) == 3:
-            self._process_data(*fields)
-        else:
-            self._process_eof(*fields)
+        if fields[0] == "DATA":
+            self._process_data(*fields[1:])
+        elif fields[0] == "EOF":
+            self._process_eof(*fields[1:])
         ack()
 
     def start(self):

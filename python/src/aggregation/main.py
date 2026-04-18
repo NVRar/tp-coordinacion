@@ -54,18 +54,18 @@ class AggregationFilter:
                     fruit_chunk,
                 )
             )
-            self.output_queue.send(message_protocol.internal.serialize([client_id, fruit_top]))
+            self.output_queue.send(message_protocol.internal.serialize_top_message(client_id, fruit_top))
             del self.fruit_data[client_id]
         else:
-            self.output_queue.send(message_protocol.internal.serialize([client_id, []]))
+            self.output_queue.send(message_protocol.internal.serialize_top_message(client_id, []))
 
     def process_messsage(self, message, ack, nack):
         logging.info("Process message")
         fields = message_protocol.internal.deserialize(message)
-        if len(fields) == 3:
-            self._process_data(*fields)
-        else:
-            self._process_eof(*fields)
+        if fields[0] == "DATA":
+            self._process_data(*fields[1:])
+        elif fields[0] == "EOF":
+            self._process_eof(*fields[1:])
         ack()
 
     def start(self):
