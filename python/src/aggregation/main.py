@@ -24,6 +24,7 @@ class AggregationFilter:
             MOM_HOST, OUTPUT_QUEUE
         )
         self.fruit_data = {}
+        self.eof_counts = {}
 
     def _process_data(self, client_id, fruit, amount):
         logging.info("Processing data message")
@@ -35,14 +36,19 @@ class AggregationFilter:
 
         for i in range(len(fruit_list)):
             if fruit_list[i].fruit == fruit:
-                fruit_list[i] = fruit_list[i] + fruit_item.FruitItem(
-                    fruit, amount
-                )
+                updated_item = fruit_list[i] + fruit_item.FruitItem(fruit, amount)
+                fruit_list.pop(i)
+                bisect.insort(fruit_list, updated_item)
                 return
         bisect.insort(fruit_list, fruit_item.FruitItem(fruit, amount))
 
     def _process_eof(self, client_id):
         logging.info("Received EOF")
+        
+        self.eof_counts[client_id] = self.eof_counts.get(client_id, 0) + 1
+        
+        if self.eof_counts[client_id] < SUM_AMOUNT:
+            return
 
         if client_id in self.fruit_data:
             fruit_list = self.fruit_data[client_id]
@@ -58,6 +64,8 @@ class AggregationFilter:
             del self.fruit_data[client_id]
         else:
             self.output_queue.send(message_protocol.internal.serialize_top_message(client_id, []))
+            
+        del self.eof_counts[client_id]
 
     def process_messsage(self, message, ack, nack):
         logging.info("Process message")
