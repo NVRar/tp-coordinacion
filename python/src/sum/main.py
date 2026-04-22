@@ -51,15 +51,7 @@ class ControlConsumer:
     def __init__(self, fruit_store, message_lock):
         self.fruit_store = fruit_store
         self.message_lock = message_lock
-        self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
-            MOM_HOST, SUM_CONTROL_EXCHANGE, [f"{SUM_CONTROL_EXCHANGE}_{ID}"]
-        )
-        self.data_output_exchanges = []
-        for i in range(AGGREGATION_AMOUNT):
-            data_output_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
-                MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{i}"]
-            )
-            self.data_output_exchanges.append(data_output_exchange)
+        
 
     def _process_eof(self, client_id):
         with self.message_lock:
@@ -81,6 +73,15 @@ class ControlConsumer:
         ack()
 
     def start(self):
+        self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
+            MOM_HOST, SUM_CONTROL_EXCHANGE, [f"{SUM_CONTROL_EXCHANGE}_{ID}"]
+        )
+        self.data_output_exchanges = []
+        for i in range(AGGREGATION_AMOUNT):
+            data_output_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
+                MOM_HOST, AGGREGATION_PREFIX, [f"{AGGREGATION_PREFIX}_{i}"]
+            )
+            self.data_output_exchanges.append(data_output_exchange)
         self.control_exchange.start_consuming(self.process_control_message)
 
 
