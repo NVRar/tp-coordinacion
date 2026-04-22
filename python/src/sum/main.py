@@ -35,12 +35,17 @@ class SumFilter:
         
 
     def process_data_messsage(self, message, ack, nack):
+        client_id = None
         with self.message_lock:
             fields = message_protocol.internal.deserialize(message)
             if fields[0] == "DATA":
                 self._process_data(*fields[1:])
             elif fields[0] == "EOF":
-                self._process_eof(*fields[1:])
+                client_id = fields[1]
+        
+        if client_id:
+            self._process_eof(client_id)
+            
         ack()
 
     def start(self):
