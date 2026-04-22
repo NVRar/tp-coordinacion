@@ -15,8 +15,9 @@ AGGREGATION_AMOUNT = int(os.environ["AGGREGATION_AMOUNT"])
 AGGREGATION_PREFIX = os.environ["AGGREGATION_PREFIX"]
 
 class SumFilter:
-    def __init__(self, fruit_store):
+    def __init__(self, fruit_store, message_lock):
         self.fruit_store = fruit_store
+        self.message_lock = message_lock
         self.input_queue = middleware.MessageMiddlewareQueueRabbitMQ(
             MOM_HOST, INPUT_QUEUE
         )
@@ -34,11 +35,12 @@ class SumFilter:
         
 
     def process_data_messsage(self, message, ack, nack):
-        fields = message_protocol.internal.deserialize(message)
-        if fields[0] == "DATA":
-            self._process_data(*fields[1:])
-        elif fields[0] == "EOF":
-            self._process_eof(*fields[1:])
+        with self.message_lock:
+            fields = message_protocol.internal.deserialize(message)
+            if fields[0] == "DATA":
+                self._process_data(*fields[1:])
+            elif fields[0] == "EOF":
+                self._process_eof(*fields[1:])
         ack()
 
     def start(self):
@@ -46,8 +48,9 @@ class SumFilter:
 
 
 class ControlConsumer:
-    def __init__(self, fruit_store):
+    def __init__(self, fruit_store, message_lock):
         self.fruit_store = fruit_store
+        self.message_lock = message_lock
         self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
             MOM_HOST, SUM_CONTROL_EXCHANGE, [f"{SUM_CONTROL_EXCHANGE}_{ID}"]
         )
@@ -59,8 +62,9 @@ class ControlConsumer:
             self.data_output_exchanges.append(data_output_exchange)
 
     def _process_eof(self, client_id):
-        items = self.fruit_store.get(client_id)
-
+        with self.message_lock:
+            items = self.fruit_store.get(client_id)
+        
         for fi in items:
             target = int(hashlib.md5(fi.fruit.encode()).hexdigest(), 16) % AGGREGATION_AMOUNT
             self.data_output_exchanges[target].send(message_protocol.internal.serialize_data_message(client_id, fi.fruit, fi.amount))
@@ -104,9 +108,10 @@ class FruitStore:
 def main():
     logging.basicConfig(level=logging.INFO)
     fruit_store = FruitStore()
-    sum_filter = SumFilter(fruit_store)
+    message_lock = threading.Lock()
+    sum_filter = SumFilter(fruit_store, message_lock)
 
-    control_consumer = ControlConsumer(fruit_store)
+    control_consumer = ControlConsumer(fruit_store, message_lock)
     control_thread = threading.Thread(target=control_consumer.start)
     control_thread.start()
 
