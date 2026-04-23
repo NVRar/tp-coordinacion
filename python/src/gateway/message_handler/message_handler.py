@@ -16,6 +16,6 @@ class MessageHandler:
 
     def deserialize_result_message(self, message):
         fields = message_protocol.internal.deserialize(message)
-        if fields[0] == "RESULT" and fields[1] == self.client_id:
+        if message_protocol.internal.is_result(fields) and fields[1] == self.client_id:
             return fields[2]
         return None

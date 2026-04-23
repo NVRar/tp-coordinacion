@@ -20,3 +20,12 @@ def serialize_top_message(client_id, fruit_top):
 
 def serialize_result_message(client_id, result):
     return serialize(["RESULT", client_id, result])
+
+def is_data(fields):
+    return fields[0] == "DATA"
+
+def is_eof(fields):
+    return fields[0] == "EOF"
+
+def is_result(fields):
+    return fields[0] == "RESULT"

@@ -47,9 +47,9 @@ class SumFilter:
             client_id = None
             with self.message_lock:
                 fields = message_protocol.internal.deserialize(message)
-                if fields[0] == "DATA":
+                if message_protocol.internal.is_data(fields):
                     self._process_data(*fields[1:])
-                elif fields[0] == "EOF":
+                elif message_protocol.internal.is_eof(fields):
                     client_id = fields[1]
             
             if client_id:
@@ -98,7 +98,7 @@ class ControlConsumer:
     def process_control_message(self, message, ack, nack):
         try:
             fields = message_protocol.internal.deserialize(message)
-            if fields[0] == "EOF":
+            if message_protocol.internal.is_eof(fields):
                 self._process_eof(fields[1])
             ack()
         except Exception as e:
