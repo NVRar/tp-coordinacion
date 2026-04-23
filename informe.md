@@ -22,6 +22,10 @@ De esta manera para ambos nos garantizamos que tenemos todos los datos antes de 
 
 ## Detalles de mi implementación
 
+### Detalle menor ciclo EOF propio de Sum
+Un detalle de la implementación actual es que cuando un Sum recibe el EOF por la input_queue, no flushea sus datos de inmediato, sino que encola el control EOF en el exchange, y recién cuando ese mensaje le vuelve por su propia cola de control procede a flushear. Es decir, el Sum que recibió el EOF original pasa por un ciclo extra de red innecesario. Una posible mejora sería que, al recibir el EOF por la input_queue, el Sum flushee sus propios datos directamente sin pasar por el exchange, y luego, al recibir el control EOF que él mismo encoló, simplemente lo ignore. Esto requeriría algún mecanismo para saber si fue ese mismo Sum quien originó el control EOF como por ejemplo, incluyendo el ID del Sum en el mensaje, o mantener un flag indicando que ese cliente ya fue flusheado. Para el alcance de este TP el impacto es mínimo, pero en un sistema con alta latencia de red o grandes volúmenes de datos podría ser una optimización considerable.
+
+### Detalle de posible incoveniente debido a retardo de red
 Luego me di cuenta de un posible problema debido a los retardos de la red. Existe la posibilidad de que un paquete de DATA de un cliente enviado desde el Gateway tenga que ir al Sum0 pero este sufra retraso en la red y quede "en vuelo". Si a continuación el Gateway despacha el paquete EOF de ese mismo cliente hacia el nodo Sum1, y viaja más rápido, el Sum1 procesará el EOF y hará el broadcast hacia el exchange de control.
 El problema ocurre si este mensaje de control vuelve a ser rápido y llega al Sum0 antes que el paquete de DATA original que todavía sigue en vuelo. En este escenario, el Sum0 procesaría el EOF primero, realizando el flush de la información para ese cliente, y cuando el paquete de DATA finalmente llegue al Sum0, la memoria ya habrá sido vaciada.
 
