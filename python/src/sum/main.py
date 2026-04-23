@@ -43,18 +43,21 @@ class SumFilter:
         
 
     def process_data_messsage(self, message, ack, nack):
-        client_id = None
-        with self.message_lock:
-            fields = message_protocol.internal.deserialize(message)
-            if fields[0] == "DATA":
-                self._process_data(*fields[1:])
-            elif fields[0] == "EOF":
-                client_id = fields[1]
-        
-        if client_id:
-            self._process_eof(client_id)
+        try:
+            client_id = None
+            with self.message_lock:
+                fields = message_protocol.internal.deserialize(message)
+                if fields[0] == "DATA":
+                    self._process_data(*fields[1:])
+                elif fields[0] == "EOF":
+                    client_id = fields[1]
             
-        ack()
+            if client_id:
+                self._process_eof(client_id)  
+            ack()
+        except Exception as e:
+            logging.error(f"Error processing message: {e}")
+            nack()
 
     def start(self):
         self.input_queue.start_consuming(self.process_data_messsage)
@@ -87,16 +90,20 @@ class ControlConsumer:
             target = int(hashlib.md5(fi.fruit.encode()).hexdigest(), 16) % AGGREGATION_AMOUNT
             self.data_output_exchanges[target].send(message_protocol.internal.serialize_data_message(client_id, fi.fruit, fi.amount))
 
-        self.fruit_store.delete(client_id)
-
         for exchange in self.data_output_exchanges:
             exchange.send(message_protocol.internal.serialize_eof(client_id))
+        
+        self.fruit_store.delete(client_id)
 
     def process_control_message(self, message, ack, nack):
-        fields = message_protocol.internal.deserialize(message)
-        if fields[0] == "EOF":
-            self._process_eof(fields[1])
-        ack()
+        try:
+            fields = message_protocol.internal.deserialize(message)
+            if fields[0] == "EOF":
+                self._process_eof(fields[1])
+            ack()
+        except Exception as e:
+            logging.error(f"Error processing control message: {e}")
+            nack()
 
     def start(self):
         self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(

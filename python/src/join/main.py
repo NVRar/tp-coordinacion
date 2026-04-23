@@ -52,12 +52,15 @@ class JoinFilter:
         
         final_top = [(item.fruit, item.amount) for item in top_items]
 
-        del self.partial_tops[client_id]
-        del self.top_counts[client_id]
-
         result = message_protocol.internal.serialize_result_message(client_id, final_top)
-        self.output_queue.send(result)
-        ack()
+        try:
+            self.output_queue.send(result)
+            del self.partial_tops[client_id]
+            del self.top_counts[client_id]
+            ack()
+        except Exception as e:
+            logging.error(f"Error sending message: {e}")
+            nack()
 
     def start(self):
         self.input_queue.start_consuming(self.process_messsage)

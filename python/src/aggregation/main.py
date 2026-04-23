@@ -76,13 +76,17 @@ class AggregationFilter:
         del self.eof_counts[client_id]
 
     def process_messsage(self, message, ack, nack):
-        logging.info("Process message")
-        fields = message_protocol.internal.deserialize(message)
-        if fields[0] == "DATA":
-            self._process_data(*fields[1:])
-        elif fields[0] == "EOF":
-            self._process_eof(*fields[1:])
-        ack()
+        try:
+            logging.info("Process message")
+            fields = message_protocol.internal.deserialize(message)
+            if fields[0] == "DATA":
+                self._process_data(*fields[1:])
+            elif fields[0] == "EOF":
+                self._process_eof(*fields[1:])
+            ack()
+        except Exception as e:
+            logging.error(f"Error processing message: {e}")
+            nack()
 
     def start(self):
         self.input_exchange.start_consuming(self.process_messsage)
