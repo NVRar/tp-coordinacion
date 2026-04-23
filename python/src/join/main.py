@@ -37,7 +37,7 @@ class JoinFilter:
         logging.info("Received top")
         fields = message_protocol.internal.deserialize(message)
         client_id = fields[1]
-        partial_top = fields[2]
+        partial_top = [fruit_item.FruitItem(f, a) for f, a in fields[2]]
 
         self.partial_tops[client_id] = self.partial_tops.get(client_id, []) + partial_top
         self.top_counts[client_id] = self.top_counts.get(client_id, 0) + 1
@@ -46,8 +46,11 @@ class JoinFilter:
             ack()
             return
 
-        merged_top = sorted(self.partial_tops[client_id], key=lambda x: x[1], reverse=True)
-        final_top = merged_top[:TOP_SIZE]
+        all_items = sorted(self.partial_tops[client_id])
+        top_items = all_items[-TOP_SIZE:]
+        top_items.reverse()
+        
+        final_top = [(item.fruit, item.amount) for item in top_items]
 
         del self.partial_tops[client_id]
         del self.top_counts[client_id]
