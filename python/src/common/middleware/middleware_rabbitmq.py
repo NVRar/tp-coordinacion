@@ -28,7 +28,7 @@ class MessageMiddlewareQueueRabbitMQ(MessageMiddlewareQueue):
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        self.channel.stop_consuming()
+        self.connection.add_callback_threadsafe(self.channel.stop_consuming)
   
 
 class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
@@ -61,4 +61,4 @@ class MessageMiddlewareExchangeRabbitMQ(MessageMiddlewareExchange):
         self.channel.start_consuming()
 
     def stop_consuming(self):
-        self.channel.stop_consuming()
+        self.connection.add_callback_threadsafe(self.channel.stop_consuming)

@@ -1,6 +1,7 @@
 import os
 import logging
 import bisect
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -25,6 +26,13 @@ class AggregationFilter:
         )
         self.fruit_data = {}
         self.eof_counts = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def _process_data(self, client_id, fruit, amount):
         logging.info("Processing data message")
@@ -79,11 +87,20 @@ class AggregationFilter:
     def start(self):
         self.input_exchange.start_consuming(self.process_messsage)
 
+    def stop(self):
+        self.input_exchange.stop_consuming()
+
+    def close(self):
+        self.input_exchange.close()
+        self.output_queue.close()
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    aggregation_filter = AggregationFilter()
-    aggregation_filter.start()
+
+    with AggregationFilter() as aggregation_filter:
+        signal.signal(signal.SIGTERM, lambda sig, frame: aggregation_filter.stop())
+        aggregation_filter.start()
+
     return 0
 
 

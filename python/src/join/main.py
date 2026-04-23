@@ -1,5 +1,6 @@
 import os
 import logging
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -24,6 +25,13 @@ class JoinFilter:
         )
         self.partial_tops = {}
         self.top_counts = {}
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def process_messsage(self, message, ack, nack):
         logging.info("Received top")
@@ -51,11 +59,19 @@ class JoinFilter:
     def start(self):
         self.input_queue.start_consuming(self.process_messsage)
 
+    def close(self):
+        self.input_queue.close()
+        self.output_queue.close()
+
+    def stop(self):
+        self.input_queue.stop_consuming()
 
 def main():
     logging.basicConfig(level=logging.INFO)
-    join_filter = JoinFilter()
-    join_filter.start()
+
+    with JoinFilter() as join_filter:
+        signal.signal(signal.SIGTERM, lambda sig, frame: join_filter.stop())
+        join_filter.start()
 
     return 0
 

@@ -2,6 +2,7 @@ import os
 import logging
 import threading
 import hashlib
+import signal
 
 from common import middleware, message_protocol, fruit_item
 
@@ -24,6 +25,13 @@ class SumFilter:
         self.control_exchange = middleware.MessageMiddlewareExchangeRabbitMQ(
             MOM_HOST, SUM_CONTROL_EXCHANGE, [f"{SUM_CONTROL_EXCHANGE}_{i}" for i in range(SUM_AMOUNT)]
         )
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
 
     def _process_data(self, client_id, fruit, amount):
         logging.info(f"Process data")
@@ -51,13 +59,26 @@ class SumFilter:
     def start(self):
         self.input_queue.start_consuming(self.process_data_messsage)
 
+    def close(self):
+        self.input_queue.close()
+        self.control_exchange.close()
+
+    def stop(self):
+        self.input_queue.stop_consuming()
+
 
 class ControlConsumer:
     def __init__(self, fruit_store, message_lock):
         self.fruit_store = fruit_store
         self.message_lock = message_lock
-        
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.close()
+        return False
+        
     def _process_eof(self, client_id):
         with self.message_lock:
             items = self.fruit_store.get(client_id)
@@ -88,6 +109,16 @@ class ControlConsumer:
             )
             self.data_output_exchanges.append(data_output_exchange)
         self.control_exchange.start_consuming(self.process_control_message)
+    
+    def stop(self):
+        if hasattr(self, 'control_exchange'):
+            self.control_exchange.stop_consuming()
+
+    def close(self):
+        if hasattr(self, 'control_exchange'):
+            self.control_exchange.close()
+        for exchange in getattr(self, 'data_output_exchanges', []):
+            exchange.close()
 
 
 class FruitStore:
@@ -115,15 +146,22 @@ def main():
     logging.basicConfig(level=logging.INFO)
     fruit_store = FruitStore()
     message_lock = threading.Lock()
-    sum_filter = SumFilter(fruit_store, message_lock)
 
-    control_consumer = ControlConsumer(fruit_store, message_lock)
-    control_thread = threading.Thread(target=control_consumer.start)
-    control_thread.start()
+    with SumFilter(fruit_store, message_lock) as sum_filter:
+        with ControlConsumer(fruit_store, message_lock) as control_consumer:
 
-    sum_filter.start()
+            def hadle_sigterm(sig, frame):
+                logging.info("Received SIGTERM, stopping...")
+                sum_filter.stop()
+                control_consumer.stop()
 
-    control_thread.join()
+            signal.signal(signal.SIGTERM, hadle_sigterm)
+
+
+            control_thread = threading.Thread(target=control_consumer.start)
+            control_thread.start()
+            sum_filter.start()
+            control_thread.join()
     return 0
 
 
